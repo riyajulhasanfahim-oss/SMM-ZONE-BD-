@@ -179,13 +179,13 @@ export async function inspectSetupState(): Promise<SetupState> {
       const adminSnap = await getDoc(
         doc(db, FIRESTORE_COLLECTIONS.adminUsers, auth.currentUser.uid)
       );
-      if (auth.currentUser.email?.trim().toLowerCase() === 'tamana87286@gmail.com') {
+      if (auth.currentUser.email?.trim().toLowerCase() === 'g81227326@gmail.com') {
         adminConfigured = true;
       } else if (adminSnap.exists()) {
         const admData = adminSnap.data() as { status?: string; email?: string };
         adminConfigured =
           admData.status === 'active' &&
-          auth.currentUser.email?.trim().toLowerCase() === 'tamana87286@gmail.com';
+          auth.currentUser.email?.trim().toLowerCase() === 'g81227326@gmail.com';
       }
     } catch {
       adminConfigured = false;

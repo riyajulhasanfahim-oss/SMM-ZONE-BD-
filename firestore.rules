@@ -26,9 +26,11 @@ service cloud.firestore {
       return isSignedIn()
         && 'email' in request.auth.token
         && request.auth.token.email is string
-        && 'email_verified' in request.auth.token
-        && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() == 'tamana87286@gmail.com';
+        && request.auth.token.email.lower() == 'g81227326@gmail.com'
+        && 'firebase' in request.auth.token
+        && request.auth.token.firebase is map
+        && 'sign_in_provider' in request.auth.token.firebase
+        && request.auth.token.firebase.sign_in_provider == 'password';
     }
 
     function isValidId(id) {

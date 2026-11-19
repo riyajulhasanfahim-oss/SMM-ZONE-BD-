@@ -737,7 +737,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setAccountStatus(switchedCache.accountStatus);
           if (
             !interactiveAuthInFlightRef.current &&
-            !adminService.isDesignatedAdminEmail(user.email)
+            !adminService.isDesignatedAdminUser(user)
           ) {
             setUserRole(switchedCache.userRole);
             setStaffRole(switchedCache.staffRole);
@@ -800,8 +800,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Auto-bootstrap Firestore collections once when designated admin signs in on an uninitialized DB
   useEffect(() => {
-    if (!firebaseUser || userRole !== 'admin' || !firebaseUser.emailVerified) return;
-    if (!adminService.isDesignatedAdminEmail(firebaseUser.email)) return;
+    if (!firebaseUser || userRole !== 'admin') return;
+    if (!adminService.isDesignatedAdminUser(firebaseUser)) return;
     if (autoDbInitAttemptedRef.current) return;
     autoDbInitAttemptedRef.current = true;
 
@@ -918,8 +918,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           balance: Number(data.balance ?? 0),
         }));
-        const effectiveStatus: UserAccountStatus = adminService.isDesignatedAdminEmail(
-          firebaseUser.email
+        const effectiveStatus: UserAccountStatus = adminService.isDesignatedAdminUser(
+          firebaseUser
         )
           ? 'active'
           : (data.status ?? 'active');

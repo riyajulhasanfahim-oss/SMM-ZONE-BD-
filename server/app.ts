@@ -13,7 +13,7 @@ const requireFromHere = createRequire(import.meta.url);
 
 const UPSTREAM_TIMEOUT_MS = 45000;
 const RETRY_BACKOFF_MINUTES = [2, 5, 15, 30, 60];
-const DESIGNATED_ADMIN_EMAIL = 'tamana87286@gmail.com';
+const DESIGNATED_ADMIN_EMAIL = 'g81227326@gmail.com';
 
 interface ProviderProxyBody {
   action?: 'balance' | 'services' | 'testConnection' | 'add' | 'status';
@@ -186,6 +186,7 @@ interface VerifiedFirebaseUser {
   uid: string;
   email: string;
   emailVerified: boolean;
+  hasPasswordProvider: boolean;
   disabled: boolean;
   customClaims?: Record<string, unknown>;
 }
@@ -221,6 +222,7 @@ async function lookupFirebaseAuthUser(
       emailVerified?: boolean;
       disabled?: boolean;
       customAttributes?: string;
+      providerUserInfo?: Array<{ providerId?: string }>;
     }>;
   };
 
@@ -245,6 +247,9 @@ async function lookupFirebaseAuthUser(
     uid: user.localId,
     email: (user.email || '').trim().toLowerCase(),
     emailVerified: Boolean(user.emailVerified),
+    hasPasswordProvider: Boolean(
+      user.providerUserInfo?.some((provider) => provider.providerId === 'password')
+    ),
     disabled: Boolean(user.disabled),
     customClaims,
   };
@@ -395,7 +400,11 @@ async function verifyAdminViaFirestoreRest(
   if (!authUser) {
     throw new Error('Unauthorized: Firebase API key configuration is missing.');
   }
-  if (authUser.disabled || !authUser.emailVerified || authUser.email !== DESIGNATED_ADMIN_EMAIL) {
+  if (
+    authUser.disabled ||
+    !authUser.hasPasswordProvider ||
+    authUser.email !== DESIGNATED_ADMIN_EMAIL
+  ) {
     throw new Error('Unauthorized: Admin privileges required.');
   }
 
@@ -772,7 +781,12 @@ export function createApiApp(): Express {
     const fbTarget = resolveRequestFirebaseTarget(req.body);
     try {
       const authUser = await lookupFirebaseAuthUser(idToken, fbTarget.apiKey);
-      if (!authUser || authUser.disabled || !authUser.emailVerified || authUser.email !== DESIGNATED_ADMIN_EMAIL) {
+      if (
+        !authUser ||
+        authUser.disabled ||
+        !authUser.hasPasswordProvider ||
+        authUser.email !== DESIGNATED_ADMIN_EMAIL
+      ) {
         res.json({
           ok: true,
           isAdmin: false,
@@ -1049,7 +1063,12 @@ export function createApiApp(): Express {
 
     try {
       const authUser = await lookupFirebaseAuthUser(idToken, fbTarget.apiKey);
-      if (!authUser || authUser.disabled || !authUser.emailVerified || authUser.email !== DESIGNATED_ADMIN_EMAIL) {
+      if (
+        !authUser ||
+        authUser.disabled ||
+        !authUser.hasPasswordProvider ||
+        authUser.email !== DESIGNATED_ADMIN_EMAIL
+      ) {
         res.status(403).json({ ok: false, error: 'Unauthorized: Admin privileges required.' });
         return;
       }

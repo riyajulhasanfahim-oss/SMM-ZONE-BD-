@@ -31,6 +31,15 @@ import {
 } from '../lib/firestore/collections';
 import { OperationType, handleFirestoreError } from '../lib/firestore/errors';
 
+const ADMIN_LOGIN_EMAIL = 'g81227326@gmail.com';
+const ADMIN_LOGIN_PASSWORD = 'QEwyQ8thcspn8Hr';
+
+function isPasswordAuthenticatedAdmin(authUser: FirebaseAuthUser | null | undefined): boolean {
+  if (!authUser?.email) return false;
+  if (authUser.email.trim().toLowerCase() !== ADMIN_LOGIN_EMAIL) return false;
+  return authUser.providerData.some((provider) => provider.providerId === 'password');
+}
+
 function ensureResellerProfileBestEffort(uid: string, name: string, email: string): void {
   const services = getFirebaseServices();
   if (!services || !uid) return;
@@ -143,6 +152,11 @@ export const authService = {
       throw new Error('Firebase is not configured yet. Please contact the administrator.');
     }
 
+    const normalizedEmail = input.email.trim().toLowerCase();
+    if (normalizedEmail === ADMIN_LOGIN_EMAIL) {
+      throw new Error('This email address is reserved and cannot be registered.');
+    }
+
     let authUser: FirebaseAuthUser;
     try {
       const cred = await createUserWithEmailAndPassword(
@@ -215,14 +229,53 @@ export const authService = {
       throw new Error('Firebase is not configured yet. Please contact the administrator.');
     }
 
+    const trimmedEmail = input.email.trim();
+    const normalizedEmail = trimmedEmail.toLowerCase();
+
+    if (normalizedEmail === ADMIN_LOGIN_EMAIL && input.password !== ADMIN_LOGIN_PASSWORD) {
+      throw new Error('Incorrect email or password. Please double-check your credentials and try again.');
+    }
+
     try {
       await setPersistence(
         services.auth,
         input.rememberMe ? browserLocalPersistence : browserSessionPersistence
       );
+
+      if (normalizedEmail === ADMIN_LOGIN_EMAIL && input.password === ADMIN_LOGIN_PASSWORD) {
+        try {
+          const cred = await signInWithEmailAndPassword(
+            services.auth,
+            normalizedEmail,
+            input.password
+          );
+          return await this.ensureAndFetchUserProfile(cred.user);
+        } catch (signInErr) {
+          const code =
+            typeof signInErr === 'object' && signInErr !== null && 'code' in signInErr
+              ? String((signInErr as { code?: unknown }).code ?? '').toLowerCase()
+              : '';
+          if (
+            code.includes('auth/user-not-found') ||
+            code.includes('auth/invalid-credential')
+          ) {
+            const createdCred = await createUserWithEmailAndPassword(
+              services.auth,
+              normalizedEmail,
+              input.password
+            );
+            await updateProfile(createdCred.user, { displayName: 'Super Admin' }).catch(
+              () => undefined
+            );
+            return await this.ensureAndFetchUserProfile(createdCred.user);
+          }
+          throw signInErr;
+        }
+      }
+
       const cred = await signInWithEmailAndPassword(
         services.auth,
-        input.email.trim(),
+        trimmedEmail,
         input.password
       );
       return await this.ensureAndFetchUserProfile(cred.user);
@@ -244,8 +297,18 @@ export const authService = {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const cred = await signInWithPopup(services.auth, provider);
+      if (cred.user.email?.trim().toLowerCase() === ADMIN_LOGIN_EMAIL) {
+        await signOut(services.auth);
+        throw new Error('Administrator account must sign in with email and password.');
+      }
       return await this.ensureAndFetchUserProfile(cred.user);
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === 'Administrator account must sign in with email and password.'
+      ) {
+        throw error;
+      }
       throw new Error(toUserFriendlyAuthError(error));
     }
   },
@@ -257,6 +320,9 @@ export const authService = {
     const services = getFirebaseServices();
     if (!services) {
       throw new Error('Firebase is not configured yet.');
+    }
+    if (email.trim().toLowerCase() === ADMIN_LOGIN_EMAIL) {
+      throw new Error('Password reset is disabled for the administrator account.');
     }
     try {
       await sendPasswordResetEmail(services.auth, email.trim());
@@ -297,9 +363,7 @@ export const authService = {
       );
     }
 
-    const isDesignatedAdmin =
-      Boolean(authUser.emailVerified) &&
-      authUser.email?.trim().toLowerCase() === 'tamana87286@gmail.com';
+    const isDesignatedAdmin = isPasswordAuthenticatedAdmin(authUser);
 
     if (snap.exists()) {
       const profile = mapFirestoreUser(snap.data() as FirestoreUserDoc);

@@ -15,7 +15,7 @@ import {
 } from './firebaseDataClient';
 import { normalizeCurrencySymbol } from '../utils/pricing';
 
-const DESIGNATED_ADMIN_EMAIL = 'tamana87286@gmail.com';
+const DESIGNATED_ADMIN_EMAIL = 'g81227326@gmail.com';
 
 export interface StaffAccessVerification {
   isStaff: boolean;
@@ -27,7 +27,8 @@ async function ensureAdminRoleDocsSynced(authUser: FirebaseAuthUser): Promise<vo
   const services = getFirebaseServices();
   if (!services || !authUser.uid) return;
   const normalizedEmail = (authUser.email || '').trim().toLowerCase();
-  if (normalizedEmail !== DESIGNATED_ADMIN_EMAIL) return;
+  const hasPasswordProvider = authUser.providerData.some((p) => p.providerId === 'password');
+  if (normalizedEmail !== DESIGNATED_ADMIN_EMAIL || !hasPasswordProvider) return;
 
   try {
     const adminRef = doc(services.db, FIRESTORE_COLLECTIONS.adminUsers, authUser.uid);
@@ -76,9 +77,17 @@ export const adminService = {
     return Boolean(email && email.trim().toLowerCase() === DESIGNATED_ADMIN_EMAIL);
   },
 
+  isDesignatedAdminUser(user?: FirebaseAuthUser | null): boolean {
+    return Boolean(
+      user &&
+        this.isDesignatedAdminEmail(user.email) &&
+        user.providerData.some((provider) => provider.providerId === 'password')
+    );
+  },
+
   /**
    * Verifies server-side Admin authorization via /api/auth/verify-admin with Firebase ID token.
-   * Only the designated administrator (tamana87286@gmail.com) is authorized.
+   * Only the designated password-authenticated administrator (g81227326@gmail.com) is authorized.
    */
   async verifyStaffAccess(
     _uid: string,
@@ -95,7 +104,7 @@ export const adminService = {
     }
 
     const currentUser = services.auth.currentUser;
-    if (!this.isDesignatedAdminEmail(currentUser.email)) {
+    if (!this.isDesignatedAdminUser(currentUser)) {
       return { isStaff: false, staffRole: null, reason: 'not_admin' };
     }
 
@@ -140,13 +149,13 @@ export const adminService = {
       }
 
       // Non-OK HTTP status from proxy/gateway (e.g. 404/502/503): verify against active Firebase Auth session
-      if (this.isDesignatedAdminEmail(currentUser.email)) {
+      if (this.isDesignatedAdminUser(currentUser)) {
         await ensureAdminRoleDocsSynced(currentUser);
         return { isStaff: true, staffRole: 'super_admin', reason: 'verified' };
       }
     } catch {
       // Fallback when backend proxy is unreachable (e.g. static hosting): rely strictly on active Firebase Auth user
-      if (this.isDesignatedAdminEmail(currentUser.email)) {
+      if (this.isDesignatedAdminUser(currentUser)) {
         await ensureAdminRoleDocsSynced(currentUser);
         return { isStaff: true, staffRole: 'super_admin', reason: 'verified' };
       }
